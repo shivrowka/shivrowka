@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>shivrowka</title>
+<style>
+:root{--bg:#f5f7fb;--card:#ffffff;--text:#111;--accent:linear-gradient(135deg,#667eea,#764ba2);}
+body.dark{--bg:#0f172a;--card:#1e293b;--text:#fff;--accent:linear-gradient(135deg,#06b6d4,#3b82f6);}
+body{margin:0;padding:20px;background:var(--bg);color:var(--text);font-family:Inter,Arial;transition:.3s}
+.logo{text-align:center;font-size:26px;letter-spacing:6px;margin-bottom:25px}
+.card{background:var(--card);padding:20px;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,.1);margin-bottom:20px}
+textarea,input{width:100%;border:none;border-radius:14px;padding:14px;font-size:16px;margin-bottom:15px;background:rgba(0,0,0,.05);color:var(--text)}
+body.dark textarea,body.dark input{background:rgba(255,255,255,.08)}
+.button{width:100%;padding:14px;border:none;border-radius:14px;font-size:16px;font-weight:600;color:#fff;cursor:pointer;background:var(--accent);transition:.2s;margin-bottom:10px}
+.button:hover{transform:translateY(-2px)}
+</style>
+</head>
+<body>
+
+<div class="logo">shivrowka</div>
+
+<div class="card">
+<label><input type="checkbox" id="themeToggle"> Тёмная тема</label>
+</div>
+
+<div class="card">
+<textarea id="t" placeholder="Введите текст..."></textarea>
+<input id="k" placeholder="Введите номер (только цифры)" inputmode="numeric">
+<button class="button" onclick="e()">Зашифровать</button>
+<button class="button" onclick="d()">Расшифровать</button>
+</div>
+
+<script>
+let X="§§"; // скрытая сигнатура
+const T=document.getElementById("themeToggle");
+if(localStorage.getItem("th")==="1"){document.body.classList.add("dark");T.checked=true}
+T.onchange=()=>{T.checked?(document.body.classList.add("dark"),localStorage.setItem("th","1")):(document.body.classList.remove("dark"),localStorage.setItem("th","0"))}
+
+async function K(n){
+const e=new TextEncoder();
+const m=await crypto.subtle.importKey("raw",e.encode(n),{name:"PBKDF2"},false,["deriveKey"]);
+return crypto.subtle.deriveKey({name:"PBKDF2",salt:e.encode("sK"),iterations:150000,hash:"SHA-256"},m,{name:"AES-GCM",length:256},false,["encrypt","decrypt"])
+}
+
+async function e(){
+const t=document.getElementById("t");
+const k=document.getElementById("k").value;
+if(!t.value||!k.match(/^[0-9]+$/))return alert("Введите текст и номер");
+if(t.value.startsWith(X))return alert("Уже зашифровано");
+const key=await K(k);
+const iv=crypto.getRandomValues(new Uint8Array(12));
+const enc=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,new TextEncoder().encode(t.value));
+const c=new Uint8Array(iv.length+enc.byteLength);
+c.set(iv);c.set(new Uint8Array(enc),iv.length);
+t.value=X+btoa(String.fromCharCode(...c))
+}
+
+async function d(){
+const t=document.getElementById("t");
+const k=document.getElementById("k").value;
+if(!t.value.startsWith(X))return alert("Уже расшифровано");
+if(!k.match(/^[0-9]+$/))return alert("Введите номер");
+try{
+const key=await K(k);
+const raw=atob(t.value.slice(2));
+const bytes=new Uint8Array([...raw].map(c=>c.charCodeAt(0)));
+const iv=bytes.slice(0,12);
+const data=bytes.slice(12);
+const dec=await crypto.subtle.decrypt({name:"AES-GCM",iv},key,data);
+t.value=new TextDecoder().decode(dec)
+}catch{
+t.value="ЛвщжылчдаодашезЗяхдкзужвьслсщж"
+}
+}
+</script>
+
+</body>
+</html>
