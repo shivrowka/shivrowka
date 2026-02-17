@@ -7,21 +7,66 @@
 
 <style>
 :root{
-  --bg:#0f172a; --card:#1e293b; --text:#fff;
+  --bg:#0f172a;
+  --card:#1e293b;
+  --text:#ffffff;
   --accent:linear-gradient(135deg,#06b6d4,#3b82f6);
 }
-body{margin:0;padding:20px;background:var(--bg);color:var(--text);
-  font-family:Inter,Arial,sans-serif}
-.logo{text-align:center;font-size:26px;letter-spacing:6px;margin-bottom:10px}
-.status{text-align:center;margin-bottom:15px;font-weight:600}
-.card{background:var(--card);padding:20px;border-radius:20px}
-textarea,input{width:100%;border:none;border-radius:14px;padding:14px;
-  font-size:16px;margin-bottom:15px;background:rgba(255,255,255,.08);color:#fff}
-.button{width:100%;padding:14px;border:none;border-radius:14px;font-size:16px;
-  font-weight:600;color:#fff;cursor:pointer;background:var(--accent);margin-bottom:10px}
-.copyBtn{background:#10b981}
-#qrBox{display:none;margin-top:15px;text-align:center}
-video{width:100%;border-radius:12px;margin-top:10px;display:none}
+
+body{
+  margin:0;
+  padding:20px;
+  background:var(--bg);
+  color:var(--text);
+  font-family:Inter,Arial,sans-serif;
+}
+
+.logo{
+  text-align:center;
+  font-size:26px;
+  letter-spacing:6px;
+  margin-bottom:15px;
+}
+
+.status{
+  text-align:center;
+  margin-bottom:15px;
+  font-weight:600;
+}
+
+.card{
+  background:var(--card);
+  padding:20px;
+  border-radius:20px;
+}
+
+textarea,input{
+  width:100%;
+  border:none;
+  border-radius:14px;
+  padding:14px;
+  font-size:16px;
+  margin-bottom:15px;
+  background:rgba(255,255,255,.08);
+  color:#fff;
+}
+
+.button{
+  width:100%;
+  padding:14px;
+  border:none;
+  border-radius:14px;
+  font-size:16px;
+  font-weight:600;
+  color:#fff;
+  cursor:pointer;
+  background:var(--accent);
+  margin-bottom:10px;
+}
+
+.copyBtn{
+  background:#10b981;
+}
 </style>
 </head>
 <body>
@@ -32,95 +77,112 @@ video{width:100%;border-radius:12px;margin-top:10px;display:none}
 <div class="card">
 
   <textarea id="text" placeholder="Введите текст..."></textarea>
+
   <input id="key" placeholder="Номер (только цифры)" inputmode="numeric">
 
   <button class="button" onclick="encrypt()">Зашифровать</button>
   <button class="button" onclick="decrypt()">Расшифровать</button>
   <button class="button copyBtn" onclick="copyText()">Скопировать</button>
 
-  <button class="button" onclick="showQR()">Показать QR</button>
-  <button class="button" onclick="startScan()">Сканировать QR</button>
-
-  <div id="qrBox"></div>
-  <video id="scanner"></video>
-
 </div>
 
-<!-- QR генерация -->
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
-<!-- QR сканирование -->
-<script src="https://unpkg.com/html5-qrcode"></script>
-
 <script>
-const MARK="\u200B\u200C";
-const textArea=document.getElementById("text");
-const keyInput=document.getElementById("key");
-const qrBox=document.getElementById("qrBox");
-const scannerVideo=document.getElementById("scanner");
+
+const MARK = "\u200B\u200C";
+const textArea = document.getElementById("text");
+const keyInput = document.getElementById("key");
 
 function setStatus(encrypted){
   document.getElementById("status").textContent =
-    encrypted?"🔒 Зашифровано":"🔓 Обычный текст";
+    encrypted ? "🔒 Зашифровано" : "🔓 Обычный текст";
 }
 
-// ===== КЛЮЧ =====
 async function deriveKey(number){
-  const enc=new TextEncoder();
-  const material=await crypto.subtle.importKey(
-    "raw",enc.encode(number),{name:"PBKDF2"},false,["deriveKey"]
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(number),
+    {name:"PBKDF2"},
+    false,
+    ["deriveKey"]
   );
+
   return crypto.subtle.deriveKey(
-    {name:"PBKDF2",salt:enc.encode("shivrowka_salt"),
-     iterations:150000,hash:"SHA-256"},
-    material,{name:"AES-GCM",length:256},
-    false,["encrypt","decrypt"]
+    {
+      name:"PBKDF2",
+      salt:enc.encode("shivrowka_salt"),
+      iterations:150000,
+      hash:"SHA-256"
+    },
+    keyMaterial,
+    {name:"AES-GCM",length:256},
+    false,
+    ["encrypt","decrypt"]
   );
 }
 
-// ===== ШИФР =====
 async function encrypt(){
-  if(textArea.value.startsWith(MARK)){alert("Уже зашифровано");return;}
-  if(!keyInput.value.match(/^[0-9]+$/)){
-    alert("Введите номер");return;
+
+  if(textArea.value.startsWith(MARK)){
+    alert("Уже зашифровано");
+    return;
   }
 
-  const key=await deriveKey(keyInput.value);
-  const iv=crypto.getRandomValues(new Uint8Array(12));
-  const encrypted=await crypto.subtle.encrypt(
+  const number = keyInput.value;
+
+  if(!number.match(/^[0-9]+$/)){
+    alert("Введите номер (только цифры)");
+    return;
+  }
+
+  const key = await deriveKey(number);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  const encrypted = await crypto.subtle.encrypt(
     {name:"AES-GCM",iv},
     key,
     new TextEncoder().encode(textArea.value)
   );
 
-  const combined=new Uint8Array(iv.length+encrypted.byteLength);
+  const combined = new Uint8Array(iv.length + encrypted.byteLength);
   combined.set(iv);
-  combined.set(new Uint8Array(encrypted),iv.length);
+  combined.set(new Uint8Array(encrypted), iv.length);
 
-  textArea.value=MARK+btoa(String.fromCharCode(...combined));
+  textArea.value = MARK + btoa(String.fromCharCode(...combined));
   setStatus(true);
 }
 
 async function decrypt(){
+
   if(!textArea.value.startsWith(MARK)){
-    alert("Уже расшифровано");return;
+    alert("Уже расшифровано");
+    return;
   }
-  if(!keyInput.value.match(/^[0-9]+$/)){
-    alert("Введите номер");return;
+
+  const number = keyInput.value;
+
+  if(!number.match(/^[0-9]+$/)){
+    alert("Введите номер (только цифры)");
+    return;
   }
 
   try{
-    const clean=textArea.value.slice(MARK.length);
-    const raw=atob(clean);
-    const bytes=new Uint8Array([...raw].map(c=>c.charCodeAt(0)));
-    const iv=bytes.slice(0,12);
-    const data=bytes.slice(12);
-    const key=await deriveKey(keyInput.value);
+    const clean = textArea.value.slice(MARK.length);
+    const raw = atob(clean);
+    const bytes = new Uint8Array([...raw].map(c=>c.charCodeAt(0)));
 
-    const decrypted=await crypto.subtle.decrypt(
-      {name:"AES-GCM",iv},key,data
+    const iv = bytes.slice(0,12);
+    const data = bytes.slice(12);
+
+    const key = await deriveKey(number);
+
+    const decrypted = await crypto.subtle.decrypt(
+      {name:"AES-GCM",iv},
+      key,
+      data
     );
 
-    textArea.value=new TextDecoder().decode(decrypted);
+    textArea.value = new TextDecoder().decode(decrypted);
     setStatus(false);
 
   }catch{
@@ -132,36 +194,6 @@ function copyText(){
   navigator.clipboard.writeText(textArea.value);
 }
 
-// ===== QR ПОКАЗ =====
-function showQR(){
-  if(!textArea.value.startsWith(MARK)){
-    alert("Сначала зашифруй текст");return;
-  }
-  qrBox.style.display="block";
-  qrBox.innerHTML="";
-  QRCode.toCanvas(textArea.value,{width:256},(err,canvas)=>{
-    qrBox.appendChild(canvas);
-  });
-}
-
-// ===== QR СКАН =====
-let html5Qr;
-function startScan(){
-  scannerVideo.style.display="block";
-  qrBox.style.display="none";
-
-  html5Qr=new Html5Qrcode("scanner");
-  html5Qr.start(
-    { facingMode: "environment" },
-    { fps:10, qrbox:250 },
-    qrText=>{
-      textArea.value=qrText;
-      html5Qr.stop();
-      scannerVideo.style.display="none";
-      setStatus(true);
-    }
-  );
-}
 </script>
 
 </body>
