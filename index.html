@@ -5,53 +5,41 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>shivrowka</title>
 
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0f172a">
-
 <style>
 :root{
-  --bg:#f5f7fb;
-  --card:#ffffff;
-  --text:#111;
-  --accent:linear-gradient(135deg,#667eea,#764ba2);
-}
-body.dark{
   --bg:#0f172a;
   --card:#1e293b;
   --text:#ffffff;
   --accent:linear-gradient(135deg,#06b6d4,#3b82f6);
 }
+
 body{
   margin:0;
   padding:20px;
   background:var(--bg);
   color:var(--text);
   font-family:Inter,Arial,sans-serif;
-  transition:.3s;
 }
+
 .logo{
   text-align:center;
   font-size:26px;
   letter-spacing:6px;
-  margin-bottom:10px;
+  margin-bottom:15px;
 }
+
 .status{
   text-align:center;
   margin-bottom:15px;
   font-weight:600;
 }
-.theme{
-  text-align:right;
-  font-size:20px;
-  cursor:pointer;
-  margin-bottom:10px;
-}
+
 .card{
   background:var(--card);
   padding:20px;
   border-radius:20px;
-  box-shadow:0 10px 30px rgba(0,0,0,.1);
 }
+
 textarea,input{
   width:100%;
   border:none;
@@ -59,13 +47,10 @@ textarea,input{
   padding:14px;
   font-size:16px;
   margin-bottom:15px;
-  background:rgba(0,0,0,.05);
-  color:var(--text);
-}
-body.dark textarea,
-body.dark input{
   background:rgba(255,255,255,.08);
+  color:#fff;
 }
+
 .button{
   width:100%;
   padding:14px;
@@ -76,71 +61,69 @@ body.dark input{
   color:#fff;
   cursor:pointer;
   background:var(--accent);
-  transition:.2s;
   margin-bottom:10px;
 }
-.button:hover{
-  transform:translateY(-2px);
-  box-shadow:0 8px 25px rgba(0,0,0,.2);
-}
+
 .copyBtn{ background:#10b981; }
-#downloadLink{
+
+img{
+  max-width:100%;
+  margin-top:15px;
+  border-radius:12px;
   display:none;
-  margin-top:10px;
-  text-decoration:none;
-  font-weight:600;
 }
 </style>
 </head>
 <body>
 
 <div class="logo">shivrowka</div>
-<div class="theme" onclick="toggleTheme()">🌙</div>
 <div class="status" id="status">🔓 Обычный текст</div>
 
 <div class="card">
-  <textarea id="text" placeholder="Введите текст или выберите файл..."></textarea>
+
+  <textarea id="text" placeholder="Введите текст..."></textarea>
 
   <input id="key" placeholder="Номер (только цифры)" inputmode="numeric">
 
-  <input type="file" id="fileInput">
+  <input type="file" id="imageInput" accept="image/*">
 
   <button class="button" onclick="encrypt()">Зашифровать</button>
   <button class="button" onclick="decrypt()">Расшифровать</button>
   <button class="button copyBtn" onclick="copyText()">Скопировать</button>
 
-  <a id="downloadLink">📥 Скачать расшифрованный файл</a>
+  <img id="preview">
+
 </div>
 
 <script>
-// ====== НАСТРОЙКИ ======
-const MARK = "\u200B\u200C"; // невидимая сигнатура
-const ITERATIONS = 150000;
-const SALT = "shivrowka_salt";
 
+const MARK = "\u200B\u200C";
 const textArea = document.getElementById("text");
 const keyInput = document.getElementById("key");
-const fileInput = document.getElementById("fileInput");
-const downloadLink = document.getElementById("downloadLink");
+const preview = document.getElementById("preview");
+const imageInput = document.getElementById("imageInput");
 
-// ====== ТЕМА ======
-function toggleTheme(){
-  document.body.classList.toggle("dark");
-  localStorage.setItem("theme",
-    document.body.classList.contains("dark") ? "dark" : "light"
-  );
-}
-if(localStorage.getItem("theme")==="dark"){
-  document.body.classList.add("dark");
-}
-
-// ====== СТАТУС ======
 function setStatus(encrypted){
   document.getElementById("status").textContent =
     encrypted ? "🔒 Зашифровано" : "🔓 Обычный текст";
 }
 
-// ====== ГЕНЕРАЦИЯ КЛЮЧА ======
+// ===== Загрузка изображения =====
+imageInput.addEventListener("change", () => {
+  const file = imageInput.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    textArea.value = "IMG::" + reader.result;
+    preview.src = reader.result;
+    preview.style.display = "block";
+    setStatus(false);
+  };
+  reader.readAsDataURL(file);
+});
+
+// ===== Генерация ключа =====
 async function deriveKey(number){
   const enc = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
@@ -154,8 +137,8 @@ async function deriveKey(number){
   return crypto.subtle.deriveKey(
     {
       name:"PBKDF2",
-      salt:enc.encode(SALT),
-      iterations:ITERATIONS,
+      salt:enc.encode("shivrowka_salt"),
+      iterations:150000,
       hash:"SHA-256"
     },
     keyMaterial,
@@ -165,30 +148,18 @@ async function deriveKey(number){
   );
 }
 
-// ====== ЗАГРУЗКА ФАЙЛА ======
-fileInput.addEventListener("change", async ()=>{
-  const file = fileInput.files[0];
-  if(!file) return;
-
-  const buffer = await file.arrayBuffer();
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-
-  textArea.value = "FILE::" + file.name + "::" + file.type + "::" + base64;
-  setStatus(false);
-  downloadLink.style.display="none";
-});
-
-// ====== ШИФРОВАНИЕ ======
+// ===== Шифрование =====
 async function encrypt(){
+
+  if(textArea.value.startsWith(MARK)){
+    alert("Уже зашифровано");
+    return;
+  }
+
   const number = keyInput.value;
 
   if(!number.match(/^[0-9]+$/)){
     alert("Введите номер (только цифры)");
-    return;
-  }
-
-  if(textArea.value.startsWith(MARK)){
-    alert("Текст уже зашифрован");
     return;
   }
 
@@ -203,24 +174,25 @@ async function encrypt(){
 
   const combined = new Uint8Array(iv.length + encrypted.byteLength);
   combined.set(iv);
-  combined.set(new Uint8Array(encrypted),iv.length);
+  combined.set(new Uint8Array(encrypted), iv.length);
 
   textArea.value = MARK + btoa(String.fromCharCode(...combined));
+  preview.style.display="none";
   setStatus(true);
-  downloadLink.style.display="none";
 }
 
-// ====== РАСШИФРОВКА ======
+// ===== Расшифровка =====
 async function decrypt(){
+
+  if(!textArea.value.startsWith(MARK)){
+    alert("Уже расшифровано");
+    return;
+  }
+
   const number = keyInput.value;
 
   if(!number.match(/^[0-9]+$/)){
     alert("Введите номер (только цифры)");
-    return;
-  }
-
-  if(!textArea.value.startsWith(MARK)){
-    alert("Текст уже расшифрован");
     return;
   }
 
@@ -242,24 +214,14 @@ async function decrypt(){
 
     const result = new TextDecoder().decode(decrypted);
 
-    if(result.startsWith("FILE::")){
-      const parts = result.split("::");
-      const fileName = parts[1];
-      const fileType = parts[2];
-      const base64Data = parts[3];
-
-      const binary = atob(base64Data);
-      const fileBytes = new Uint8Array([...binary].map(c=>c.charCodeAt(0)));
-
-      const blob = new Blob([fileBytes], {type:fileType});
-      downloadLink.href = URL.createObjectURL(blob);
-      downloadLink.download = fileName;
-      downloadLink.style.display="block";
-
-      textArea.value = "[Файл расшифрован]";
+    if(result.startsWith("IMG::")){
+      const imgData = result.replace("IMG::","");
+      preview.src = imgData;
+      preview.style.display="block";
+      textArea.value = "[Изображение расшифровано]";
     } else {
+      preview.style.display="none";
       textArea.value = result;
-      downloadLink.style.display="none";
     }
 
     setStatus(false);
@@ -269,15 +231,10 @@ async function decrypt(){
   }
 }
 
-// ====== КОПИРОВАНИЕ ======
 function copyText(){
   navigator.clipboard.writeText(textArea.value);
 }
 
-// ====== PWA ======
-if("serviceWorker" in navigator){
-  navigator.serviceWorker.register("service-worker.js");
-}
 </script>
 
 </body>
